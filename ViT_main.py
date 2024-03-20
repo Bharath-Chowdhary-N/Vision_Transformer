@@ -48,8 +48,8 @@ class InputEmbedding(nn.Module):
 
         patches = einops.rearrange(input_data, 'b c (h h1) (w w1) -> b (h w) (h1 w1 c)', h1=self.patch_size, w1=self.patch_size)
 
-        print(input_data.size())
-        print(patches.size())
+        print("class token",self.class_token.size())
+        print("patch size",patches.size())
 
         linear_projection = self.linearProjection(patches).to(self.device)
         
@@ -96,10 +96,37 @@ class EncoderBlock(nn.Module):
         
         return output
         
-     
+class ViT(nn.Module):
+    def __init__(self, latent_size=latent_size, dropout=dropout, num_encoders=num_encoders, device=device):
+        super(ViT, self).__init__()
+        self.latent_size = latent_size
+        self.dropout = dropout
+        self.num_encoders = num_encoders
+        self.device = device
+        self.dropout = dropout
+
+        self.embedding = InputEmbedding(latent_size=self.latent_size, device=self.device)
+        self.encStack = nn.ModuleList([EncoderBlock(latent_size=self.latent_size, dropout=self.dropout, device=self.device) for i in range(self.num_encoders)])
+        
+        self.MLP_head = nn.Sequential(nn.LayerNorm(self.latent_size), nn.Linear(self.latent_size, self.latent_size),nn.Linear(self.latent_size, num_classes))
+    
+    def forward(self, test_input):
+        enc_output = self.embedding(test_input)
+
+        for enc_layer in self.encStack:
+            enc_output = enc_layer(enc_output)
+        cls_token_embed = enc_output[0,:]
+
+        return self.MLP_head(cls_token_embed)
+        
+
 test_input = torch.randn(1,3,224,224)
 test_class = InputEmbedding().to(device)
 embed_test = test_class(test_input)
 
 test_encoder = EncoderBlock().to(device)
 test_encoder(embed_test)
+
+model = ViT().to(device)
+ViT_output = model(test_input)
+print(ViT_output.size())
